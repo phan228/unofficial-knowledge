@@ -1,4 +1,4 @@
-# API keys — never commit these
+# API keys
 .env
 
 # Python
