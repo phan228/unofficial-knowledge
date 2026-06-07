@@ -9,11 +9,7 @@
 
 ## Domain
 
-<!-- What topic or category of knowledge does your system cover?
-     Why is this knowledge valuable, and why is it hard to find through official channels?
-     Example: "Student reviews of CS professors at [university] — useful because official
-     course descriptions don't reflect teaching style, exam difficulty, or workload." -->
-
+Students' reviews of programs and professors at George Washington University. The project is useful because official school pages describe programs and opportunities, but they do not capture the lived experience of students: how hard classes are, which professors are worth taking, whether internships are easy to find, or whether the cost feels justified.
 ---
 
 ## Document Sources
@@ -24,16 +20,13 @@
 
 | # | Source | Type | URL or file path |
 |---|--------|------|-----------------|
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
-| 6 | | | |
-| 7 | | | |
-| 8 | | | |
-| 9 | | | |
-| 10 | | | |
+| 1 | RateMyProfessors | review site | https://www.ratemyprofessors.com/search/professors/353?q=* |
+| 2 | GW Engineering | official school site | https://engineering.gwu.edu/ |
+| 3 | GW Employment | official employment site | https://gwu-studentemployment.peopleadmin.com/postings/search?utf8=%E2%9C%93&query=&query_v0_posted_at_date=&1387%5B%5D=5&435=&query_organizational_tier_3_id%5B%5D=any&commit=Search |
+| 4 | College Confidential | forum | https://talk.collegeconfidential.com/c/colleges-and-universities/the-george-washington-university/230/l/latest?ascending=false&order=activity |
+| 5 | Unigo | review site | https://www.unigo.com/colleges/george-washington-university |
+
+I also attempted to collect Reddit, US News, Niche, and Glassdoor, but those sources were blocked or timed out in this environment, so they were not included in the final indexed corpus.
 
 ---
 
@@ -48,12 +41,19 @@
 
 **Chunk size:**
 
+250 tokens
+
 **Overlap:**
+
+50 tokens
 
 **Why these choices fit your documents:**
 
+The corpus is review-heavy and opinion-dense, so a 250-token window is large enough to keep a full student thought together while still staying within the embedding model's comfort zone. A 50-token overlap preserves context across boundaries so a key sentence is less likely to be cut off. Before chunking, the ingestion script strips HTML, removes obvious page chrome and boilerplate, normalizes whitespace, and keeps the remaining text in token-based sliding windows.
+
 **Final chunk count:**
 
+12 chunks across the current indexed corpus
 ---
 
 ## Embedding Model
@@ -66,7 +66,31 @@
 
 **Model used:**
 
+all-MiniLM-L6-v2 via sentence-transformers
+
 **Production tradeoff reflection:**
+
+I chose MiniLM because it is fast, local, and sufficient for short review chunks. If cost were not a constraint, I would consider a stronger hosted embedding model such as text-embedding-3-large for better semantic matching on nuanced review language, or a longer-context local model if I wanted larger chunks with less boundary loss. The tradeoff is accuracy versus latency, cost, and operational simplicity.
+
+## Embedding and Retrieval
+
+If your system `python3` does not have the project dependencies installed, activate the repo virtualenv first:
+
+```bash
+source .venv/bin/activate
+```
+
+Build the ChromaDB index from the chunked corpus:
+
+```bash
+python3 embedding_retrieval.py build --chunks-file chunks.jsonl --persist-dir chroma_db
+```
+
+Run a retrieval query against the stored chunks:
+
+```bash
+python3 embedding_retrieval.py query "Which CS professors are worth taking?" --top-k 5 --persist-dir chroma_db
+```
 
 ---
 
@@ -81,8 +105,22 @@
 
 **System prompt grounding instruction:**
 
+The generation layer uses a strict prompt: answer only from the provided context, do not use outside knowledge, and if the context is insufficient reply exactly with `I don't have enough information on that.` It also tells the model to keep the answer concise, use bracket citations like `[1]`, and not invent sources. The CLI post-processes the model output so the final response stays in a predictable format.
+
 **How source attribution is surfaced in the response:**
 
+The retrieved context is numbered before it is sent to the LLM. The response is printed as two sections: `Answers` and `Source list`. Each source entry includes the source name, source URI, chunk index, token span, and similarity score so the answer can be traced back to the original document.
+
+## Query Interface
+
+The project includes a small Gradio web UI that calls the same grounded generation pipeline.
+
+```bash
+source .venv/bin/activate
+python3 app.py
+```
+
+Open `http://127.0.0.1:7860` in your browser after launching the app.
 ---
 
 ## Evaluation Report
@@ -93,11 +131,11 @@
 
 | # | Question | Expected answer | System response (summarized) | Retrieval quality | Response accuracy |
 |---|----------|-----------------|------------------------------|-------------------|-------------------|
-| 1 | | | | | |
-| 2 | | | | | |
-| 3 | | | | | |
-| 4 | | | | | |
-| 5 | | | | | |
+| 1 | Is GWU considered worth the cost by its students? | Reviews discussing tuition, financial aid, and value relative to D.C. opportunities | Some students say GWU is worth it because of strong academics and real-world opportunities, while others worry about cost and debt. | Relevant | Accurate |
+| 2 | Which CS professors are worth taking? | Named professors from RateMyProfessors with comments about class quality | The system identified Joe Goldfrank from RateMyProfessors and reported his quality rating and how often students would take the class again. | Relevant | Accurate |
+| 3 | What do students say about class sizes in the engineering school? | References to small or large classes, access to professors, and discussion quality | The system returned the exact fallback: `I don't have enough information on that.` | Partially relevant | Accurate |
+| 4 | Is GW a good school? | Reviews discussing GW reputation and overall student sentiment | The system said GWU is considered a good school because of its academics, D.C. location, internships, and research opportunities, while noting cost concerns. | Relevant | Accurate |
+| 5 | Research/job opportunities | Students' reviews on research and jobs for GW graduates | The system summarized internships, research assistant positions, tutoring jobs, and D.C.-based networking opportunities. | Relevant | Accurate |
 
 **Retrieval quality:** Relevant / Partially relevant / Off-target  
 **Response accuracy:** Accurate / Partially accurate / Inaccurate
@@ -119,12 +157,19 @@
 
 **Question that failed:**
 
+What do students say about class sizes in the engineering school?
+
 **What the system returned:**
+
+I don't have enough information on that.
 
 **Root cause (tied to a specific pipeline stage):**
 
+The retrieval corpus does not contain an explicit source that discusses engineering class sizes in enough detail. The retriever returned broad GWU review and engineering-page chunks, but they did not include a direct answer, so the generation layer correctly abstained instead of guessing. This is a retrieval coverage issue, not a model hallucination issue.
+
 **What you would change to fix it:**
 
+Add a more targeted source that discusses engineering course sizes directly, or collect a better engineering forum/review page. I would also consider a small query router or reranker for questions about class size, because that wording should favor documents that mention section size, lecture size, or professor access.
 ---
 
 ## Spec Reflection
@@ -134,8 +179,11 @@
 
 **One way the spec helped you during implementation:**
 
+The planning document gave a clear target for the chunking strategy, embedding model, top-k retrieval size, and the kinds of sources the corpus should include. That made it straightforward to keep the ingestion, retrieval, and generation layers aligned instead of inventing a separate architecture midstream.
+
 **One way your implementation diverged from the spec, and why:**
 
+The spec assumed all ten planned sources would be available, but several sites blocked scraping or returned errors in this environment. To keep the project working, I used best-effort ingestion, stored only the sources I could actually collect, and added a confidence gate so the generator could refuse low-signal queries rather than hallucinating.
 ---
 
 ## AI Usage
@@ -152,11 +200,23 @@
 **Instance 1**
 
 - *What I gave the AI:*
+
+     The chunking strategy and source list from `planning.md`, plus the requirement to load documents, clean them, and split them into ~250-token windows with 50-token overlap.
 - *What it produced:*
+
+     A token-based ingestion pipeline with cleaning, planning-file URL parsing, and JSONL chunk output.
 - *What I changed or overrode:*
+
+     I tightened the boilerplate filters, added site-specific extraction for the noisier sources, and added preview/output helpers so the chunk quality could be checked directly.
 
 **Instance 2**
 
 - *What I gave the AI:*
+
+     The retrieval and grounding requirements from `planning.md`, including `all-MiniLM-L6-v2`, `top-k = 5`, ChromaDB storage, and grounded answers with source attribution.
 - *What it produced:*
+
+     A retrieval module and a generation wrapper that used the retrieved chunks as context for an LLM.
 - *What I changed or overrode:*
+
+     I added a confidence threshold, enforced the exact fallback sentence when the corpus did not support an answer, and wrapped the generation output so the response format stayed `Answers` plus `Source list`.
