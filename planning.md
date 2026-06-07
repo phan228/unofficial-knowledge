@@ -139,4 +139,8 @@ how to run: `python3 ingest_documents.py --planning-file planning.md --output-fi
 
 **Milestone 4 — Embedding and retrieval:**
 
+see embedding_retrieval.py
+
+how to run: python3 embedding_retrieval.py query "Which CS professors are worth taking?" --top-k 5 --persist-dir chroma_db
+
 **Milestone 5 — Generation and interface:**
