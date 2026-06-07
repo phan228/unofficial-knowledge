@@ -9,7 +9,7 @@
 
 ## Domain
 
-<!-- What domain did you choose? Why is this knowledge valuable and hard to find through official channels? -->
+students' reviews of programs at George Washington University
 
 ---
 
@@ -20,16 +20,16 @@
 
 | # | Source | Description | URL or location |
 |---|--------|-------------|-----------------|
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
-| 6 | | | |
-| 7 | | | |
-| 8 | | | |
-| 9 | | | |
-| 10 | | | |
+| 1 | ratemyprofessors | students' reviews of professors | https://www.ratemyprofessors.com/search/professors/353?q=* |
+| 2 | gwu reddit | The unofficial subreddit of The George Washington University | https://www.reddit.com/r/gwu/ |
+| 3 | us news | the us news page for gwu| https://www.usnews.com/best-colleges/george-washington-university-1444 |
+| 4 | gw engineering| gw official website for the school of engineering | https://engineering.gwu.edu/ |
+| 5 | niche | aggregates student reviews on academics, campus life, safety, value, etc. | https://www.niche.com/colleges/george-washington-university/reviews/ |
+| 6 | gw employment | employment opportunities at gw | https://gwu-studentemployment.peopleadmin.com/postings/search?utf8=%E2%9C%93&query=&query_v0_posted_at_date=&1387%5B%5D=5&435=&query_organizational_tier_3_id%5B%5D=any&commit=Search |
+| 7 | college confidential | forums with candid student/parent discussions | https://talk.collegeconfidential.com/c/colleges-and-universities/the-george-washington-university/230/l/latest?ascending=false&order=activity |
+| 8 | unigo | student-written reviews and Q&As | https://www.unigo.com/colleges/george-washington-university |
+| 9 | Glassdoor | student workers & TA perspectives on GW | https://www.glassdoor.com/Reviews/George-Washington-University-Reviews-E3733.html |
+| 10 | subreddit | GWU subreddit wiki/ top posts | https://www.reddit.com/r/gwu/search/?q=cs+professor&sort=top |
 
 ---
 
@@ -42,9 +42,15 @@
 
 **Chunk size:**
 
+ ~200–300 tokens
+
 **Overlap:**
 
+50 tokens
+
 **Reasoning:**
+
+Reviews are short, opinion-dense, and self-contained. A 200-token chunk captures one person's full thought without mixing opinions across reviewers. Overlap ensures a sentence that straddles a boundary isn't lost. Reddit threads need special care — chunk by comment, not by post, since each comment is its own opinion.
 
 ---
 
@@ -58,9 +64,17 @@
 
 **Embedding model:**
 
+all-MiniLM-L6-v2 (via sentence-transformers) 
+
 **Top-k:**
 
+k = 5
+
 **Production tradeoff reflection:**
+
+use text-embedding-3-large (OpenAI) — higher accuracy but paid and slower
+
+Context length: MiniLM handles up to 256 tokens, which fits chunk size — but a model with longer context (like nomic-embed-text) gives more headroom if I want bigger chunks
 
 ---
 
@@ -73,11 +87,11 @@
 
 | # | Question | Expected answer |
 |---|----------|-----------------|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+| 1 | Is GWU considered worth the cost by its students? | Reviews discussing tuition, financial aid, value relative to DC location/networking/job opportunities/reputation |
+| 2 | Which CS professors are worth taking? | Named professors from RateMyProfessors with comments about class quality |
+| 3 | What do students say about class sizes in the engineering school? | References to small/large classes, access to professors, discussion quality |
+| 4 | Is GW a good school? | Reviews dicussing gw reputation |
+| 5 | Research/job oppotunires | Students' reviews on research oppotunities and job for students who graduate from gw |
 
 ---
 
@@ -87,9 +101,9 @@
      Consider: noisy or inconsistent documents, missing source attribution, off-topic
      retrieval, chunks that split key information across boundaries. -->
 
-1.
+1. Noisy, opinion-mixed chunks from Reddit. A single Reddit thread might contain 40 replies ranging from housing advice to memes. If chunk by character rather than by comment, easily get semantically incoherent chunks that hurt retrieval precision. Fix: parse Reddit threads by comment before chunking.
 
-2.
+2. Source attribution loss — When a chunk is retrieved, need to know it came from RateMyProfessors vs. Reddit vs. Niche, because those have very different credibility levels. If we don't store metadata alongside embeddings, generated answers can't cite sources meaningfully. Fix: store source, url, and date as metadata fields in vector store from the start.
 
 ---
 
@@ -100,6 +114,8 @@
      Label each stage with the tool or library you're using.
      You can use ASCII art, a Mermaid diagram, or embed a sketch as an image.
      You'll use this diagram as context when prompting AI tools to implement each stage. -->
+
+     BeautifulSoup / PRAW /requests -> Chunking (LangChain, RecursiveCharacterTextSplitter) ~250 tokens, 50 overlap -> Embedding (sentence-transformers, all-MiniLM-L6-v2) -> Vector Store (Chroma or FAISS with metadata) -> Retrieval (Top-k=5 similarity search) -> Generation (Claude / GPT-4with retrieved chunks as context)
 
 ---
 
