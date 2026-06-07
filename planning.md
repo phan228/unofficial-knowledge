@@ -133,6 +133,10 @@ Context length: MiniLM handles up to 256 tokens, which fits chunk size — but a
 
 **Milestone 3 — Ingestion and chunking:**
 
+see ingest_documents.py
+
+how to run: `python3 ingest_documents.py --planning-file planning.md --output-file /tmp/gwu_chunks.jsonl --preview-document --preview-chunks 5`
+
 **Milestone 4 — Embedding and retrieval:**
 
 **Milestone 5 — Generation and interface:**
